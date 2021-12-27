@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- Markus Nimi – LIN101, Fall 2020 -->
+	<title>Minimal Pair and Allophone Distribution Analyzer</title>
+	<script src="https://code.jquery.com/jquery-3.5.1.js"integrity="sha256-QWo7LDvxbWT2tbbQ97B53yJnYU3WhH/C8ycbRAkjPDc="crossorigin="anonymous"></script>
+  <link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style type="text/css">
+  	body{
+  		margin:20px;
+  	}
+  	td, th {
+  		border:1px solid #000;
+  		min-width:100px;
+  		padding:10px;
+  		text-align:center;
+  	}
+  	.col-md-6 {
+  		float:left;
+  	}
+  	h2, h5 {
+  		margin-left:15px;
+  	}
+  	button {
+  		margin: 5px 0;
+  	}
+  </style>
+</head>
+<body>
+	<h2>Minimal Pair and Allophone Distribution Analyzer</h2>
+	<h5>Markus Nimi – LIN101, Fall 2020</h5>
+
+	<div class="col col-md-6 col-sm-12">
+		<br>
+		<h4>Overview</h4>
+		<p>This resources is intended to differentiate whether two or more allophones are of the same phoneme, or of different phonemes. Since no gloss is provided, for the simplicity of the program and the user, this program cannot be used to determine free variation; the user must ensure first that no two words provided have the same gloss. As well, the program does not detect whether phonemes are close enough phonetically to be considered allophones of the same phoneme – this is left up to the user. Similarily, the program deals with each environment as its explicit symbols and does not reference natural classes (except when dealing with affricates or vowels when dipthongs are specified). Do not use any diacritics other than tonal accents (e.g. á, ȁ, ǎ). There is no limit to the number of phonemes that can be analyzed, but then an exponentially large amount of data is needed to provide an accurate conclusion.</p>
+
+		<p>Below are 3 examples from hypothetical languages that illustrate the capabilities of the program.</p>
+
+		<label>Phonemes in Question (Seperated by Spaces):</label> <input id="phonemes" type="phonemes" name="phonemes" value="" placeholder="IPA phonemes">
+		<br>
+		<label>Allow diphthongs: </label> <input type="checkbox" name="diphthongs" id="diphthongs" checked="true">
+		<br>
+		<label>Data set (Seperated by Spaces):</label>
+		<br>
+		<textarea id="dataSet" style="height:300px;width:100%" placeholder="Copy-Paste or type the IPA Dataset here"></textarea>
+
+		<br>
+		<button onclick="example1()" class="example btn btn-primary">Example A: 3 allophones, 1 phoneme</button>
+		<button onclick="example2()" class="example btn btn-primary">Example B: 3 allophones, 2 phoneme</button>
+		<button onclick="example3()" class="example btn btn-primary">Example C: 3 allophones, 3 phoneme</button>
+
+		<br>
+		<br>
+		<button onclick="initiate()" class="btn btn-success" id="run">Run!</button>
+	</div>
+	<div class="col col-md-6 col-sm-12" id="results" style="display: none">
+		<p id="summary">
+			<br>
+			<h4>Conclusion</h4>
+			<h6 id="conclusion"></h6>
+			<h4>Minimal Pairs</h4>
+			<p>Minimal pairs differ in a single segment. Each minimal pair below shows that the corresponding allophones must then be of different phonemes. If no minimal pairs are found, we can proceed to distributions around each phoneme to find near-minimal pairs or matching environments, if they exist.</p>
+			<p>Note: suppose we have 2 minimal pairs: between [A] and [B], and [B] and [C]. Given just this information, it is possible for [A] and [C] to be allophones of the same phoneme; the program assumes that they are.</p>
+			<table>
+				<thead>
+					<tr id="pairsHead"></tr>
+				</thead>
+				<tbody id="pairsBody"></tbody>
+			</table>
+			<h4>Distributions</h4>
+			<p>Environments in red appear around two or more allophones (these are overlapping environments). In these cases, we can then conclude that these segments in question are allophones of different phonemes.</p>
+			<p>Hover over red environments to highlight where else these environments appear.</p>
+			<table>
+				<thead>
+					<tr id="distributionHead"></tr>
+				</thead>
+				<tbody id="distributionBody"></tbody>
+			</table>
+		</p>
+	</div>
+
+
+	<script type="text/javascript">
+		var datasetRaw;
+		var datasetWords;
+		var phonemesRaw;
+		var phonemes;
+		var phonemesDistribution = {};
+		var phonemesDistributionByEnv = {};
+		var diphthongs;
+		var phonemeGroupings = [];
+		var conclusion = "";
+
+		var affricates = {
+			"pɸ": "Ṗ",
+			"bβ": "Ḃ",
+			"ts": "Ṫ",
+			"dz": "Ḋ",
+			"tʃ": "ṫ",
+			"dʒ": "ḋ",
+			"cç": "Ċ",
+			"ɟʝ": "Ĵ",
+			"kx": "Ḱ",
+			"gɣ": "Ġ"
+		}
+
+		var vowels = ["i", "y", "ɨ", "ʉ", "ɯ", "u", "ɪ", "ʏ", "ɪ", "ʊ", "ʊ", "e", "ø", "ɘ", "ɵ", "ɤ", "o", "ə", "ɛ", "œ", "ɜ", "ɞ", "ʌ", "ɔ", "æ", "ɐ", "a", "ɶ", "ä", "ɒ", "ɑ", "ɒ"]
+
+		function initiate() {
+			datasetRaw = returnModifiedAffricates($("#dataSet").val());
+			diphthongs = $("#diphthongs")[0].checked;
+
+
+			datasetWords = datasetRaw.split(/\s/g).filter(function(el) {return !!el});
+			phonemesRaw = $("#phonemes").val().split(/\s/g).filter(function(el) {return !!el});
+			phonemes = [];
+			for(i=0;i<phonemesRaw.length;i++) {
+				phonemes.push(returnModifiedAffricates(phonemesRaw[i]))
+			}
+
+			minimalPairs = [];
+			for(i=0;i<phonemes.length;i++) {
+				for(j=i;j<phonemes.length;j++) {
+					var pairs = findMinimalPairs(phonemes[i], phonemes[j]);
+					for(k=0;k<pairs.length;k++) {
+						minimalPairs.push(pairs[k]);
+					}
+				}
+			}
+
+			phonemesDistribution = {};
+			for(i=0;i<phonemes.length;i++) {
+				phonemesDistribution[phonemes[i]] = [];
+			}
+
+			var distributionMaxLength = 0;
+			$("#distributionHead").html("");
+			$("#pairsHead").html("");
+			for(i=0;i<phonemes.length;i++) {
+				//For each phoneme in phonemesDistribution, get the distribution
+				getPhonemeDistributions(phonemes[i]);
+
+				$("#pairsHead").append("<th>" + returnAffricates(phonemes[i]) + "</th>");
+				$("#distributionHead").append("<th>" + returnAffricates(phonemes[i]) + "</th>");
+				if(phonemesDistribution[phonemes[i]].length > distributionMaxLength) {distributionMaxLength = phonemesDistribution[phonemes[i]].length}
+			}
+
+			//Create table rows
+			$("#pairsBody").html("");
+			for(i=0;i<minimalPairs.length;i++) {
+				$("#pairsBody").append("<tr>" + ("<td></td>".repeat(phonemes.length)) + "</tr>");
+			}
+			$("#distributionBody").html("");
+			for(i=0;i<distributionMaxLength;i++) {
+				$("#distributionBody").append("<tr>" + ("<td></td>".repeat(phonemes.length)) + "</tr>");
+			}
+			if(minimalPairs.length == 0) {
+				$("#pairsBody").append("<tr><td colspan='3'>There are no minimal pairs</td></tr>");
+			}
+
+
+			//Populate table body
+			populatePairs();
+			populateDistributions();
+
+			phonemesDistributionByEnv = findSimilarDistributions()
+
+
+
+			conclusion = "";
+			phonemeGroupings = [];
+
+			for(i=0;i<phonemes.length;i++) {
+				if(i==0) {
+					phonemeGroupings.push([phonemes[i]]);
+				}else{
+					sameEnv = [];
+					for(env in phonemesDistributionByEnv){
+						//if phoneme i is in the given env and there is more than 1 phoneme in this env
+						if(phonemesDistributionByEnv[env].indexOf(phonemes[i]) != -1 && phonemesDistributionByEnv[env].length > 1) {
+							//phoneme[i] appears in this distribution
+							for(a=0;a<phonemesDistributionByEnv[env].length;a++) {
+								//for all other phonemes in this env, push them to sameEnv
+								if(phonemesDistributionByEnv[env][a] != phonemes[i] && sameEnv.indexOf(phonemesDistributionByEnv[env][a]) == -1) {
+									sameEnv.push(phonemesDistributionByEnv[env][a]);
+								}
+							}
+						}
+					}
+
+					for(j=0;j<phonemeGroupings.length;j++) {
+						var overlap = false
+						for(k=0;k<phonemeGroupings[j].length;k++) {
+							for(l=0;l<sameEnv.length;l++) {
+								if(phonemeGroupings[j][k] == sameEnv[k]) {
+									overlap = true
+								}
+							}
+						}
+						if(!overlap) {
+							phonemeGroupings[j].push(phonemes[i]);
+						}else {
+							phonemeGroupings.push([phonemes[i]]);
+						}
+					}
+				}
+			}
+
+			var uniqueGroupings0 = [];
+			for(i=0;i<phonemeGroupings.length;i++) {
+				var sublist = [];
+				$.each(phonemeGroupings[i], function(i, el){
+				    if($.inArray(el, sublist) === -1) sublist.push(el);
+				});
+				uniqueGroupings0.push(sublist)
+			}
+
+			var uniqueGroupings1 = [];
+			for(i=0;i<uniqueGroupings0.length;i++) {
+				isASubset = false;
+				for(j=0;j<uniqueGroupings0.length;j++) {
+					if(i != j && uniqueGroupings0[i].every(val => uniqueGroupings0[j].includes(val)) && uniqueGroupings0[j].length > uniqueGroupings0[i].length) {
+						isASubset = true;
+					}
+				}
+				if(!isASubset) {
+					uniqueGroupings1.push(uniqueGroupings0[i]);
+				}
+			}
+
+			var stringArray = uniqueGroupings1.map(JSON.stringify);
+			var uniqueStringArray = new Set(stringArray);
+			var uniqueGroupings = Array.from(uniqueStringArray, JSON.parse);
+
+			for(i=0;i<uniqueGroupings.length;i++) {
+				var temp = "";
+				if(uniqueGroupings[i].length == 1) {
+					temp += "[" + uniqueGroupings[i][0] + "] is an allophone of a different phoneme. "
+				}else {
+					for(j=0;j<uniqueGroupings[i].length;j++) {
+						if(j < uniqueGroupings[i].length - 1) {
+							temp += "[" + uniqueGroupings[i][j] + "], ";
+						}else {
+							temp += " and [" + uniqueGroupings[i][j] + "] are allophones of the same phoneme, given that they are phonetically similar. ";
+						}
+					}
+				}
+
+				conclusion += temp;
+			}
+
+			var smallestSizeMinPairs = -1;
+			for(phoneme in phonemesDistribution) {
+			    if(phonemesDistribution[phoneme].length > smallestSizeMinPairs) {
+			        smallestSizeMinPairs = phonemesDistribution[phoneme].length;
+			    }
+			}
+			var smallestSizeDistributions = -1;
+			for(env in phonemesDistributionByEnv) {
+				if(phonemesDistributionByEnv[env].length > smallestSizeDistributions) {
+					smallestSizeDistributions = phonemesDistributionByEnv[env].length;
+				}
+			}
+			$("#results").css("display", "block");
+			if(smallestSizeDistributions == 1) {
+				$("#distributionBody").append("<tr><td colspan='3'>There are no overlapping environments.</td></tr>");
+				$("#conclusion").html(returnAffricates(conclusion));
+			}else if(distributionMaxLength == 0 || smallestSizeMinPairs == 0) {
+				$("#distributionBody").append("<tr><td colspan='3'>Insufficient data</td></tr>");
+				$("#conclusion").html("The provided data does not show all of the phonemes in question.");
+			}else {
+				$("#conclusion").html(returnAffricates(conclusion));
+			}
+		}
+
+		function getPhonemeDistributions(phoneme) {
+			//Given phoneme, populate phonemesDistribution with the occurances
+			for(j=0;j<datasetWords.length;j++) {
+			    for(k=0;k<datasetWords[j].length;k++) {
+			    	if(datasetWords[j][k] == phoneme) {
+				    	var thisLetter = datasetWords[j][k];
+				    	var letterBefore = "#";
+				    	var letterAfter = "#";
+
+				    	if(k != 0) {
+				    		if(k > 1 && vowels.includes(datasetWords[j][k - 2]) && vowels.includes(datasetWords[j][k - 1]) && diphthongs) {
+				    			letterBefore = datasetWords[j][k - 2] + datasetWords[j][k - 1];
+				    		}else {
+				    			letterBefore = datasetWords[j][k - 1];
+				    		}
+				    	}
+				    	if(k != datasetWords[j].length - 1) {
+				    		if(k < datasetWords[j].length - 2 && vowels.includes(datasetWords[j][k + 2]) && vowels.includes(datasetWords[j][k + 1]) && diphthongs) {
+				    			letterAfter = datasetWords[j][k + 1] + datasetWords[j][k + 2];
+				    		}else {
+				    			letterAfter = datasetWords[j][k + 1];
+				    		}
+				    	}
+
+				    	alreadyExists = false;
+				    	for(a=0;a<phonemesDistribution[phoneme].length;a++) {
+				    		if(phonemesDistribution[phoneme][a].before == letterBefore && phonemesDistribution[phoneme][a].after == letterAfter) {
+				    			alreadyExists = true;
+				    		}
+				    	}
+				    	if(!alreadyExists) {
+				    		phonemesDistribution[phoneme].push({"before": letterBefore, "after": letterAfter});
+				    	}
+			    	}
+			    }
+			}
+		}
+
+
+		function findMinimalPairs(phoneme1, phoneme2) {
+			//Return any minimal pairs between two phonees
+			var pairs = [];
+			for(a=0;a<datasetWords.length;a++) {
+				for(b=a+1;b<datasetWords.length;b++) {
+					if(datasetWords[a].length == datasetWords[b].length) {
+						var numDifferences = 0;
+						var indexOfDifference;
+						for(c=0;c<datasetWords[a].length;c++) {
+							if(datasetWords[a][c] != datasetWords[b][c]) {
+								numDifferences++;
+								indexOfDifference = c;
+							}
+						}
+						//If the two words differ by only one character
+						if(numDifferences == 1) {
+							var aIs1 = datasetWords[a][indexOfDifference] == phoneme1;
+							var bIs1 = datasetWords[b][indexOfDifference] == phoneme1;
+							var aIs2 = datasetWords[a][indexOfDifference] == phoneme2;
+							var bIs2 = datasetWords[b][indexOfDifference] == phoneme2;
+
+							//If the two words differ by the two phonemes in question
+							if(aIs1 && bIs2) {
+								pairs.push({[phoneme1]: datasetWords[a], [phoneme2]: datasetWords[b]});
+							}else if (aIs2 && bIs1) {
+								pairs.push({[phoneme1]: datasetWords[b], [phoneme2]: datasetWords[a]});
+							}
+						}
+					}
+				}
+
+			}
+			return pairs;
+		}
+
+
+		function compareDistributions(phoneme1, phoneme2) {
+			//Return whether the two phonemes are in complementary distribution, and if not, where they fail to be
+			var areComplementary = true;
+			var failedExamples = [];
+			var set1 = phonemesDistribution[phoneme1];
+			var set2 = phonemesDistribution[phoneme2];
+			for(j=0;j<set1.length;j++) {
+				for(k=0;k<set2.length;k++) {
+					if(set1[j].before == set2[k].before && set1[j].after == set2[k].after) {
+						areComplementary = false;
+						failedExamples.push({before: set1[j].before, after: set1[j].after})
+					}
+				}
+			}
+			return [areComplementary, failedExamples];
+
+		}
+
+		function populatePairs() {
+			for(i=0;i<minimalPairs.length;i++) {
+				var indexOfPhoneme1 = phonemes.indexOf(Object.keys(minimalPairs[i])[0]);
+				var indexOfPhoneme2 = phonemes.indexOf(Object.keys(minimalPairs[i])[1]);
+
+				$("#pairsBody").find("tr").eq(i).find("td").eq(indexOfPhoneme1).html(returnAffricates(minimalPairs[i][Object.keys(minimalPairs[i])[0]]));
+				$("#pairsBody").find("tr").eq(i).find("td").eq(indexOfPhoneme2).html(returnAffricates(minimalPairs[i][Object.keys(minimalPairs[i])[1]]));
+			}
+		}
+
+		function populateDistributions() {
+			for(i=0;i<phonemes.length;i++) {
+				for(j=0;j<phonemesDistribution[phonemes[i]].length;j++) {
+					var charBefore = returnAffricates(phonemesDistribution[phonemes[i]][j].before);
+					var charAfter = returnAffricates(phonemesDistribution[phonemes[i]][j].after);
+
+					$("#distributionBody").find("tr").eq(j).find("td").eq(i).html(returnAffricates(charBefore + "_" + charAfter));
+				}
+			}
+		}
+
+		function findSimilarDistributions() {
+			var modifiedDistributions = [];
+			var multipleDistributions = [];
+			for(a=0;a<phonemes.length;a++){
+				for(b=0;b<phonemesDistribution[phonemes[a]].length;b++) {
+					var newKey = phonemesDistribution[phonemes[a]][b].before + "_" + phonemesDistribution[phonemes[a]][b].after;
+					if(!(newKey in modifiedDistributions)) {
+						modifiedDistributions[newKey] = [phonemes[a]];
+					}else {
+						modifiedDistributions[newKey].push(phonemes[a]);
+						multipleDistributions.push(newKey);
+					}
+				}
+			}
+
+			for(a=0;a<multipleDistributions.length;a++) {
+				$("#distributionBody td").each(function(){
+				    if($(this).html().indexOf(returnAffricates(multipleDistributions[a])) != -1) {
+				    	const thisDistribution = returnAffricates(multipleDistributions[a]);
+				    	$(this).css("color", "#ff0000");
+				    	$(this).on("mouseover", function(){
+				    		$(this).css("background-color", "#f8d7da");
+				    		$("#distributionBody td").each(function(){
+							    if($(this).html().indexOf(returnAffricates(thisDistribution)) != -1) {
+							    	$(this).css("background-color", "#f8d7da");
+							    }
+							})
+				    	})
+				    	$(this).on("mouseout", function(){
+				    		$(this).css("background-color", "#ffffff");
+				    		$("#distributionBody td").each(function(){
+							    if($(this).html().indexOf(returnAffricates(thisDistribution)) != -1) {
+							    	$(this).css("background-color", "#ffffff");
+							    }
+							})
+				    	})
+				    }
+				})
+			}
+			return modifiedDistributions;
+		}
+
+
+		function returnModifiedAffricates(string) {
+			for(var affricate in affricates) {
+				string = string.replace(new RegExp(affricate, "g"), affricates[affricate])
+			}
+			return string;
+		}
+
+		function returnAffricates(string) {
+			for(var affricate in affricates) {
+				string = string.replace(new RegExp(affricates[affricate], "g"), affricate)
+			}
+			return string;
+		}
+		function arraysEqual(a, b) {
+			if (a === b) return true;
+			if (a == null || b == null) return false;
+			if (a.length !== b.length) return false;
+
+
+			for(i=0;i<a.length;++i) {
+				if (a[i] !== b[i]) return false;
+			}
+			return true;
+		}
+
+
+		function example1() {
+			$("#phonemes").val("t d n");
+			$("#dataSet").val("adoʃo retʁagowadʒn odeʃjorgan ʃaʁbadas wetgadalo todamwetʃn totwa eʁtorn supwedzn");
+		}
+		function example2() {
+			$("#phonemes").val("ts tʃ ʃ");
+			$("#dataSet").val("tsyθaʃa tʃero tetsuoʃ taʃon atsa tʃyθaʃa tʃadzon tʃayθ tatson tʃon heʃyno eʃayθ tsaʃer");
+		}
+		function example3() {
+			$("#phonemes").val("e i ɪ");
+			$("#dataSet").val("dacçɪnɪ meloɾitsɪ ɪdecçoni edgicçen milohalonɪ genadɪ gɪcçopi ihaɾetsɪ imeɾitsogode");
+		}
+	</script>
+	<!-- Markus Nimi – LIN101, Fall 2020 -->
+</body>
+</html>
