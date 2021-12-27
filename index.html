@@ -92,6 +92,7 @@
 		var phonemeGroupings = [];
 		var conclusion = "";
 
+		// Define affricates as single characters
 		var affricates = {
 			"pɸ": "Ṗ",
 			"bβ": "Ḃ",
@@ -105,20 +106,25 @@
 			"gɣ": "Ġ"
 		}
 
+		// Define vowels
 		var vowels = ["i", "y", "ɨ", "ʉ", "ɯ", "u", "ɪ", "ʏ", "ɪ", "ʊ", "ʊ", "e", "ø", "ɘ", "ɵ", "ɤ", "o", "ə", "ɛ", "œ", "ɜ", "ɞ", "ʌ", "ɔ", "æ", "ɐ", "a", "ɶ", "ä", "ɒ", "ɑ", "ɒ"]
 
 		function initiate() {
+			// Get the raw data from the input
 			datasetRaw = returnModifiedAffricates($("#dataSet").val());
 			diphthongs = $("#diphthongs")[0].checked;
 
-
+			// Extract the words from the raw dataset
 			datasetWords = datasetRaw.split(/\s/g).filter(function(el) {return !!el});
+			
+			// Extract the phonemes that exist in the data set
 			phonemesRaw = $("#phonemes").val().split(/\s/g).filter(function(el) {return !!el});
 			phonemes = [];
 			for(i=0;i<phonemesRaw.length;i++) {
 				phonemes.push(returnModifiedAffricates(phonemesRaw[i]))
 			}
 
+			// Extract the minimal pairs in the dataset
 			minimalPairs = [];
 			for(i=0;i<phonemes.length;i++) {
 				for(j=i;j<phonemes.length;j++) {
@@ -129,6 +135,7 @@
 				}
 			}
 
+			// Create set of phoneme distributions by phoneme type
 			phonemesDistribution = {};
 			for(i=0;i<phonemes.length;i++) {
 				phonemesDistribution[phonemes[i]] = [];
@@ -146,7 +153,7 @@
 				if(phonemesDistribution[phonemes[i]].length > distributionMaxLength) {distributionMaxLength = phonemesDistribution[phonemes[i]].length}
 			}
 
-			//Create table rows
+			// Create table rows
 			$("#pairsBody").html("");
 			for(i=0;i<minimalPairs.length;i++) {
 				$("#pairsBody").append("<tr>" + ("<td></td>".repeat(phonemes.length)) + "</tr>");
@@ -160,7 +167,7 @@
 			}
 
 
-			//Populate table body
+			// Populate table body
 			populatePairs();
 			populateDistributions();
 
@@ -169,19 +176,22 @@
 
 
 			conclusion = "";
+			
+			// Group phonemes by same distributions
 			phonemeGroupings = [];
-
 			for(i=0;i<phonemes.length;i++) {
 				if(i==0) {
+					// If this is the first phoneme, it will be a unique grouping
 					phonemeGroupings.push([phonemes[i]]);
 				}else{
+					// Find all identical environments
 					sameEnv = [];
 					for(env in phonemesDistributionByEnv){
-						//if phoneme i is in the given env and there is more than 1 phoneme in this env
+						// If phoneme i is in the given env and there is more than 1 phoneme in this env
 						if(phonemesDistributionByEnv[env].indexOf(phonemes[i]) != -1 && phonemesDistributionByEnv[env].length > 1) {
-							//phoneme[i] appears in this distribution
+							// phonemes[i] appears in this distribution
 							for(a=0;a<phonemesDistributionByEnv[env].length;a++) {
-								//for all other phonemes in this env, push them to sameEnv
+								// For all other phonemes in this env, push them to sameEnv
 								if(phonemesDistributionByEnv[env][a] != phonemes[i] && sameEnv.indexOf(phonemesDistributionByEnv[env][a]) == -1) {
 									sameEnv.push(phonemesDistributionByEnv[env][a]);
 								}
@@ -189,6 +199,7 @@
 						}
 					}
 
+					// Determine if there is sufficient overlap
 					for(j=0;j<phonemeGroupings.length;j++) {
 						var overlap = false
 						for(k=0;k<phonemeGroupings[j].length;k++) {
@@ -229,6 +240,7 @@
 				}
 			}
 
+			// Create the conclusion string
 			var stringArray = uniqueGroupings1.map(JSON.stringify);
 			var uniqueStringArray = new Set(stringArray);
 			var uniqueGroupings = Array.from(uniqueStringArray, JSON.parse);
@@ -275,14 +287,17 @@
 		}
 
 		function getPhonemeDistributions(phoneme) {
-			//Given phoneme, populate phonemesDistribution with the occurances
+			// Given phoneme, populate phonemesDistribution with the occurences
 			for(j=0;j<datasetWords.length;j++) {
 			    for(k=0;k<datasetWords[j].length;k++) {
 			    	if(datasetWords[j][k] == phoneme) {
 				    	var thisLetter = datasetWords[j][k];
+					
+					// "#" substitutes for a word boundary
 				    	var letterBefore = "#";
 				    	var letterAfter = "#";
 
+					// Get the before environment
 				    	if(k != 0) {
 				    		if(k > 1 && vowels.includes(datasetWords[j][k - 2]) && vowels.includes(datasetWords[j][k - 1]) && diphthongs) {
 				    			letterBefore = datasetWords[j][k - 2] + datasetWords[j][k - 1];
@@ -290,6 +305,8 @@
 				    			letterBefore = datasetWords[j][k - 1];
 				    		}
 				    	}
+					
+					// Get the after environment
 				    	if(k != datasetWords[j].length - 1) {
 				    		if(k < datasetWords[j].length - 2 && vowels.includes(datasetWords[j][k + 2]) && vowels.includes(datasetWords[j][k + 1]) && diphthongs) {
 				    			letterAfter = datasetWords[j][k + 1] + datasetWords[j][k + 2];
@@ -314,7 +331,7 @@
 
 
 		function findMinimalPairs(phoneme1, phoneme2) {
-			//Return any minimal pairs between two phonees
+			// Return any minimal pairs between two phonees
 			var pairs = [];
 			for(a=0;a<datasetWords.length;a++) {
 				for(b=a+1;b<datasetWords.length;b++) {
@@ -327,7 +344,7 @@
 								indexOfDifference = c;
 							}
 						}
-						//If the two words differ by only one character
+						// If the two words differ by only one character
 						if(numDifferences == 1) {
 							var aIs1 = datasetWords[a][indexOfDifference] == phoneme1;
 							var bIs1 = datasetWords[b][indexOfDifference] == phoneme1;
@@ -403,6 +420,7 @@
 				}
 			}
 
+			// Listeners for highlighting identical environments
 			for(a=0;a<multipleDistributions.length;a++) {
 				$("#distributionBody td").each(function(){
 				    if($(this).html().indexOf(returnAffricates(multipleDistributions[a])) != -1) {
@@ -444,6 +462,7 @@
 			}
 			return string;
 		}
+		
 		function arraysEqual(a, b) {
 			if (a === b) return true;
 			if (a == null || b == null) return false;
